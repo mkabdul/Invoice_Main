@@ -315,5 +315,6 @@ if st.session_state.json_outputs:
                 file_name=f"{image_name}_output.csv",
                 mime="text/csv",
                 key=f"download-{image_name}"  # Ensure unique key for each download button
-            )if __name__ == "__main__":
+            )
+if __name__ == "__main__":
     main()
