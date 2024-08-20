@@ -292,7 +292,7 @@ def main():
 
     # Display JSON outputs with expanders and individual download buttons
 
-    if st.session_state.json_outputs:
+if st.session_state.json_outputs:
     for image_name, json_output in st.session_state.json_outputs.items():
         with st.expander(f"JSON Output for {image_name}"):
             st.json(json_output)
@@ -315,6 +315,5 @@ def main():
                 file_name=f"{image_name}_output.csv",
                 mime="text/csv",
                 key=f"download-{image_name}"  # Ensure unique key for each download button
-            )
-if __name__ == "__main__":
+            )if __name__ == "__main__":
     main()
