@@ -1,8 +1,5 @@
-
-
-import pandas as pd
+#3
 import aspose.words as aw
-import io
 from io import BytesIO
 import streamlit as st
 from langchain_core.messages import HumanMessage
@@ -10,11 +7,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from PIL import Image, ImageDraw, ImageFont
 import os, fitz
 import json, time
+import pandas as pd
 from docx import Document
 
-
 os.environ["GOOGLE_API_KEY"] = 'AIzaSyBbepUh8x3CqpkxNFnJ1IX0dFc0UNTwwbU'
-
 
 # Initialize the ChatGoogleGenerativeAI model
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest")
@@ -56,7 +52,7 @@ def process_invoice(image_path):
         content=[
             {
                 "type": "text",
-                "text": """You will carefully analyze the invoice only and get the output in pure JSON within a Python list format with relevant details
+                "text": """You will carefully analyze the invoice only and get the output in pure json within a python list format with relevant details
                 with invoice id as default ino [{}], your response shall not contain ' ```python ' and ' ``` '
                         """,
             },
@@ -93,7 +89,7 @@ def convert_docx_to_images(docx_file, invoice_dir):
         options.vertical_resolution = 300
 
         # Save the page image to a BytesIO buffer
-        buffer = io.BytesIO()
+        buffer = BytesIO()
         doc.save(buffer, options)
         buffer.seek(0)
 
@@ -160,54 +156,8 @@ def clear_invoice_dir(invoice_dir):
         except Exception as e:
             print(f'Failed to delete {file_path}. Reason: {e}')
 
-def parse_invoice_to_table(output):
-    # Log or print the raw output for debugging
-    # st.write(f"Raw Output: {output}")  # Removed raw output display
-
-    # Ensure output is a dictionary or list
-    try:
-        if isinstance(output, str):
-            json_output = json.loads(output)
-        else:
-            json_output = output
-    except json.JSONDecodeError as e:
-        st.error(f"Failed to decode JSON from the output: {e}")
-        return pd.DataFrame()
-
-    # Handle cases where json_output might be a list
-    if isinstance(json_output, list):
-        if len(json_output) > 0 and isinstance(json_output[0], dict):
-            json_output = json_output[0]  # Take the first item if it's a dictionary
-        else:
-            st.error("JSON list does not contain dictionaries.")
-            return pd.DataFrame()
-
-    if not isinstance(json_output, dict):
-        st.error("Output is neither a dictionary nor a valid list of dictionaries.")
-        return pd.DataFrame()
-
-    # Define the expected fields for the table
-    fields = [
-        "Invoice #", "Invoice Date",  "amount_due", "bill_to",
-        "shipping_to", "name", "phone", "payment_terms", "items",
-        "description", "quantity", "rate", "amount", "product_based",
-        "subtotal", "tax", "grand_total"
-    ]
-
-    # Initialize an empty dictionary for the table data
-    table_data = {field: json_output.get(field, None) for field in fields}
-
-    # Add items to the table if they exist
-    if "items" in json_output:
-        items = json_output["items"]
-        for item in items:
-            for field in ["description", "quantity", "rate", "amount"]:
-                table_data.setdefault(f"Item_{item.get('item_number', '')}_{field}", item.get(field, None))
-
-    return pd.DataFrame([table_data])
-
 def main():
-    # Load and display the company logo
+
     logo_path = "logo.png"  # Replace with your logo path
     logo = Image.open(logo_path)
 
@@ -216,14 +166,27 @@ def main():
 
     with col1:
         st.image(logo, width=100)  # Adjust the width as needed
-
+    # with col2:
+    #     st.markdown(
+    #         """
+    #         <h1 style="font-family:Arial, sans-serif; color:#4CAF50; font-size:36px;">
+    #             Invoice Data Analyzer
+    #         </h1>
+    #         """,
+    #         unsafe_allow_html=True
+    #     )
     with col2:
-        st.title("Invoice Data Analyzer")
-
+        st.markdown(
+            """
+            <h1 style="font-family:Georgia, serif; color:#4CAF50; font-size:36px;">
+                Invoice Data Analyzer
+            </h1>
+            """,
+            unsafe_allow_html=True
+        )
     option = st.radio(
         "Select an option:",
-        ("Upload Invoice Images, PDFs, TXT Files", "Select Existing Images")
-    )
+        ("Upload Invoice Images, PDFs, TXT Files", "Select Existing Images"))
 
     use_custom_font = st.checkbox('Use custom font for txt to image')
 
@@ -248,61 +211,119 @@ def main():
                 f.write(uploaded_font.getbuffer())
             st.write(f"Now using font: {uploaded_font.name}")
 
-    if 'table_outputs' not in st.session_state:
-        st.session_state.table_outputs = []
+    if 'json_outputs' not in st.session_state:
+        st.session_state.json_outputs = {}
 
-    invoice_dir = "invoice_images/"
+    invoice_dir = '/tmp/invoices/'
+
+    # Create the directory if it doesn't exist
     if not os.path.exists(invoice_dir):
         os.makedirs(invoice_dir)
 
+    # Button to clear the invoice directory
+    if st.button("Clear Invoice Directory"):
+        clear_invoice_dir(invoice_dir)
+        st.success("Invoice directory cleared!")
+
     if option == "Upload Invoice Images, PDFs, TXT Files":
-        uploaded_files = st.file_uploader("Choose PDF, Image, or TXT files", type=["pdf", "png", "jpg", "jpeg", "txt"], accept_multiple_files=True)
+        uploaded_files = st.file_uploader("Choose images, PDFs, TXT files...", type=["jpg", "jpeg", "png", "pdf", "txt", "docx"], accept_multiple_files=True)
+        if uploaded_files:
+            for uploaded_file in uploaded_files:
+                if uploaded_file.name.endswith('.pdf'):
+                    pdf_path = os.path.join(invoice_dir, uploaded_file.name)
+                    with open(pdf_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    image_paths = convert_pdf_to_images_with_pymupdf(pdf_path, invoice_dir)
+                    for image_path in image_paths:
+                        image = Image.open(image_path)
+                        st.image(image, caption=os.path.basename(image_path), use_column_width=True)
+                elif uploaded_file.name.endswith('.txt'):
+                    txt_path = os.path.join(invoice_dir, uploaded_file.name)
+                    with open(txt_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    image_path = txt_to_image(txt_path, invoice_dir, custom_font_path)
+                    st.image(image_path, caption=os.path.basename(image_path), use_column_width=True)
+                elif uploaded_file.name.endswith('.docx'):
+                    docx_path = os.path.join(invoice_dir, uploaded_file.name)
+                    with open(docx_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    image_path = convert_docx_to_images(docx_path, invoice_dir)
+                    st.image(image_path, caption=os.path.basename(image_path), use_column_width=True)
+                else:
+                    image = Image.open(uploaded_file)
+                    st.image(image, caption=uploaded_file.name, use_column_width=True)
+                    with open(os.path.join(invoice_dir, uploaded_file.name), "wb") as f:
+                        f.write(uploaded_file.getbuffer())
 
-        for uploaded_file in uploaded_files:
-            if uploaded_file.type == "application/pdf":
-                pdf_path = os.path.join(invoice_dir, uploaded_file.name)
-                with open(pdf_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                image_paths = convert_pdf_to_images_with_pymupdf(pdf_path, invoice_dir)
-                for image_path in image_paths:
-                    st.image(image_path)
-                    json_output = process_invoice(image_path)
-                    table_df = parse_invoice_to_table(json_output)
-                    st.write("Extracted Data:", table_df)
-
-            elif uploaded_file.type in ["image/png", "image/jpeg"]:
-                image_path = os.path.join(invoice_dir, uploaded_file.name)
-                with open(image_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.image(image_path)
-                json_output = process_invoice(image_path)
-                table_df = parse_invoice_to_table(json_output)
-                st.write("Extracted Data:", table_df)
-
-            elif uploaded_file.type == "text/plain":
-                txt_file = os.path.join(invoice_dir, uploaded_file.name)
-                with open(txt_file, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                image_path = txt_to_image(txt_file, invoice_dir, custom_font_path)
-                st.image(image_path)
-                json_output = process_invoice(image_path)
-                table_df = parse_invoice_to_table(json_output)
-                st.write("Extracted Data:", table_df)
+            if st.button("Process All Uploaded Files"):
+                for uploaded_file in uploaded_files:
+                    if uploaded_file.name.endswith('.pdf'):
+                        pdf_path = os.path.join(invoice_dir, uploaded_file.name)
+                        image_paths = convert_pdf_to_images_with_pymupdf(pdf_path, invoice_dir)
+                        for image_path in image_paths:
+                            output = process_invoice(image_path)
+                            json_output = json.loads(output)
+                            st.session_state.json_outputs[os.path.basename(image_path)] = json_output
+                    elif uploaded_file.name.endswith('.txt'):
+                        txt_path = os.path.join(invoice_dir, uploaded_file.name)
+                        image_path = txt_to_image(txt_path, invoice_dir, custom_font_path)
+                        output = process_invoice(image_path)
+                        json_output = json.loads(output)
+                        st.session_state.json_outputs[os.path.basename(image_path)] = json_output
+                    elif uploaded_file.name.endswith('.docx'):
+                        docx_path = os.path.join(invoice_dir, uploaded_file.name)
+                        image_path = convert_docx_to_images(docx_path, invoice_dir)
+                        output = process_invoice(image_path)
+                        json_output = json.loads(output)
+                        st.session_state.json_outputs[os.path.basename(image_path)] = json_output
+                    else:
+                        image_path = os.path.join(invoice_dir, uploaded_file.name)
+                        output = process_invoice(image_path)
+                        json_output = json.loads(output)
+                        st.session_state.json_outputs[uploaded_file.name] = json_output
 
     elif option == "Select Existing Images":
-        existing_images = [f for f in os.listdir(invoice_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
-        selected_images = st.multiselect("Select images", existing_images)
+        image_files = [f for f in os.listdir(invoice_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+        selected_images = st.multiselect("Select images", image_files)
 
-        for image_name in selected_images:
-            image_path = os.path.join(invoice_dir, image_name)
-            st.image(image_path)
-            json_output = process_invoice(image_path)
-            table_df = parse_invoice_to_table(json_output)
-            st.write("Extracted Data:", table_df)
+        if selected_images:
+            for selected_image in selected_images:
+                image_path = os.path.join(invoice_dir, selected_image)
+                image = Image.open(image_path)
+                st.image(image, caption=selected_image, use_column_width=True)
 
-    if st.button('Clear Invoice Directory'):
-        clear_invoice_dir(invoice_dir)
-        st.write("Invoice directory cleared.")
+            if st.button("Process All Selected Images"):
+                for selected_image in selected_images:
+                    image_path = os.path.join(invoice_dir, selected_image)
+                    output = process_invoice(image_path)
+                    json_output = json.loads(output)
+                    st.session_state.json_outputs[selected_image] = json_output
 
+    # Display JSON outputs with expanders and individual download buttons
+
+    if st.session_state.json_outputs:
+        for image_name, json_output in st.session_state.json_outputs.items():
+            with st.expander(f"JSON Output for {image_name}"):
+                st.json(json_output)
+
+                # Convert JSON to tabular format for CSV download
+                if "Products/Services" in json_output:
+                    products_df = pd.json_normalize(json_output["Products/Services"])
+                    other_info = {key: json_output[key] for key in json_output if key != "Products/Services"}
+                    other_info_df = pd.DataFrame([other_info])
+                    final_df = other_info_df.join(products_df)
+                else:
+                    final_df = pd.DataFrame([json_output])
+
+                # Convert DataFrame to CSV
+                csv_data = final_df.to_csv(index=False)
+
+                st.download_button(
+                    label=f"Download CSV for {image_name}",
+                    data=csv_data,
+                    file_name=f"{image_name}_output.csv",
+                    mime="text/csv",
+                    key=f"download-{image_name}"  # Ensure unique key for each download button
+                )
 if __name__ == "__main__":
     main()
