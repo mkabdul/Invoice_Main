@@ -1,4 +1,3 @@
-
 import aspose.words as aw
 from io import BytesIO
 import streamlit as st
@@ -47,6 +46,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
 def process_invoice(image_path):
     message = HumanMessage(
         content=[
@@ -62,6 +62,7 @@ def process_invoice(image_path):
     response = llm.invoke([message])
     return response.content
 
+
 def convert_pdf_to_images_with_pymupdf(pdf_path, output_folder, zoom_x=2.0, zoom_y=2.0):
     """Convert PDF pages to images with high resolution."""
     doc = fitz.open(pdf_path)
@@ -76,6 +77,7 @@ def convert_pdf_to_images_with_pymupdf(pdf_path, output_folder, zoom_x=2.0, zoom
         image_paths.append(image_path)
         print(f'Generated image: {image_path}')
     return image_paths
+
 
 def convert_docx_to_images(docx_file, invoice_dir):
     """Convert DOCX file pages to high-quality images."""
@@ -117,6 +119,7 @@ def convert_docx_to_images(docx_file, invoice_dir):
 
     return combined_image_file
 
+
 def txt_to_image(txt_file, invoice_dir, custom_font_path=None):
     """Convert text file to a high-resolution image."""
     with open(txt_file, 'r') as f:
@@ -144,6 +147,7 @@ def txt_to_image(txt_file, invoice_dir, custom_font_path=None):
 
     return txt_image_path
 
+
 def clear_invoice_dir(invoice_dir):
     """Clear all files in the specified directory."""
     for filename in os.listdir(invoice_dir):
@@ -156,8 +160,8 @@ def clear_invoice_dir(invoice_dir):
         except Exception as e:
             print(f'Failed to delete {file_path}. Reason: {e}')
 
-def main():
 
+def main():
     logo_path = "logo.png"  # Replace with your logo path
     logo = Image.open(logo_path)
 
@@ -217,7 +221,8 @@ def main():
         st.success("Invoice directory cleared!")
 
     if option == "Upload Invoice Images, PDFs, TXT Files":
-        uploaded_files = st.file_uploader("Choose images, PDFs, TXT files...", type=["jpg", "jpeg", "png", "pdf", "txt", "docx"], accept_multiple_files=True)
+        uploaded_files = st.file_uploader("Choose images, PDFs, TXT files...",
+                                          type=["jpg", "jpeg", "png", "pdf", "txt", "docx"], accept_multiple_files=True)
         if uploaded_files:
             for uploaded_file in uploaded_files:
                 if uploaded_file.name.endswith('.pdf'):
@@ -291,30 +296,29 @@ def main():
                     st.session_state.json_outputs[selected_image] = json_output
 
     # Display JSON outputs with expanders and individual download buttons
+    if st.session_state.json_outputs:
+        for image_name, json_output in st.session_state.json_outputs.items():
+            with st.expander(f"JSON Output for {image_name}"):
+                st.json(json_output)
 
-if st.session_state.json_outputs:
-    for image_name, json_output in st.session_state.json_outputs.items():
-        with st.expander(f"JSON Output for {image_name}"):
-            st.json(json_output)
+                # Convert JSON to tabular format for CSV download
+                if "Products/Services" in json_output:
+                    products_df = pd.json_normalize(json_output["Products/Services"])
+                    other_info = {key: json_output[key] for key in json_output if key != "Products/Services"}
+                    other_info_df = pd.DataFrame([other_info])
+                    final_df = other_info_df.join(products_df)
+                else:
+                    final_df = pd.DataFrame([json_output])
 
-            # Convert JSON to DataFrame
-            if "Products/Services" in json_output:
-                products_df = pd.json_normalize(json_output["Products/Services"])
-                other_info = {key: json_output[key] for key in json_output if key != "Products/Services"}
-                other_info_df = pd.DataFrame([other_info])
-                final_df = pd.concat([other_info_df, products_df], axis=1)
-            else:
-                final_df = pd.DataFrame([json_output])
-            
-            # Convert DataFrame to CSV
-            csv_data = final_df.to_csv(index=False)
+                # Convert DataFrame to CSV
+                csv_data = final_df.to_csv(index=False)
 
-            st.download_button(
-                label=f"Download CSV for {image_name}",
-                data=csv_data,
-                file_name=f"{image_name}_output.csv",
-                mime="text/csv",
-                key=f"download-{image_name}"  # Ensure unique key for each download button
-            )
+                st.download_button(
+                    label=f"Download CSV for {image_name}",
+                    data=csv_data,
+                    file_name=f"{image_name}_output.csv",
+                    mime="text/csv",
+                    key=f"download-{image_name}"  # Ensure unique key for each download button
+                )
 if __name__ == "__main__":
     main()
