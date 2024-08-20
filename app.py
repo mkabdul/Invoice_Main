@@ -166,15 +166,6 @@ def main():
 
     with col1:
         st.image(logo, width=100)  # Adjust the width as needed
-    # with col2:
-    #     st.markdown(
-    #         """
-    #         <h1 style="font-family:Arial, sans-serif; color:#4CAF50; font-size:36px;">
-    #             Invoice Data Analyzer
-    #         </h1>
-    #         """,
-    #         unsafe_allow_html=True
-    #     )
     with col2:
         st.markdown(
             """
@@ -302,28 +293,28 @@ def main():
     # Display JSON outputs with expanders and individual download buttons
 
     if st.session_state.json_outputs:
-        for image_name, json_output in st.session_state.json_outputs.items():
-            with st.expander(f"JSON Output for {image_name}"):
-                st.json(json_output)
+    for image_name, json_output in st.session_state.json_outputs.items():
+        with st.expander(f"JSON Output for {image_name}"):
+            st.json(json_output)
 
-                # Convert JSON to tabular format for CSV download
-                if "Products/Services" in json_output:
-                    products_df = pd.json_normalize(json_output["Products/Services"])
-                    other_info = {key: json_output[key] for key in json_output if key != "Products/Services"}
-                    other_info_df = pd.DataFrame([other_info])
-                    final_df = other_info_df.join(products_df)
-                else:
-                    final_df = pd.DataFrame([json_output])
+            # Convert JSON to DataFrame
+            if "Products/Services" in json_output:
+                products_df = pd.json_normalize(json_output["Products/Services"])
+                other_info = {key: json_output[key] for key in json_output if key != "Products/Services"}
+                other_info_df = pd.DataFrame([other_info])
+                final_df = pd.concat([other_info_df, products_df], axis=1)
+            else:
+                final_df = pd.DataFrame([json_output])
+            
+            # Convert DataFrame to CSV
+            csv_data = final_df.to_csv(index=False)
 
-                # Convert DataFrame to CSV
-                csv_data = final_df.to_csv(index=False)
-
-                st.download_button(
-                    label=f"Download CSV for {image_name}",
-                    data=csv_data,
-                    file_name=f"{image_name}_output.csv",
-                    mime="text/csv",
-                    key=f"download-{image_name}"  # Ensure unique key for each download button
-                )
+            st.download_button(
+                label=f"Download CSV for {image_name}",
+                data=csv_data,
+                file_name=f"{image_name}_output.csv",
+                mime="text/csv",
+                key=f"download-{image_name}"  # Ensure unique key for each download button
+            )
 if __name__ == "__main__":
     main()
